@@ -12,18 +12,37 @@ class HomeViewController: UIViewController {
     lazy var tableView : UITableView = {
         let tableView = UITableView(frame: .zero)
         tableView.translatesAutoresizingMaskIntoConstraints = false
+        tableView.register(UINib(nibName: "PokemonTableViewCell", bundle: Bundle.main), forCellReuseIdentifier: "pokemonCell")
+        let refreshControl = UIRefreshControl()
+        refreshControl.addTarget(self, action: #selector(getMoreData), for: .valueChanged)
+        tableView.refreshControl = refreshControl
         tableView.delegate = self
-        tableView.dataSource = self
         return tableView
     }()
     
-    var pokemonData = ["bulbasaur","ivysaur","venusaur","charmander","charmeleon","charizard","squirtle","wartortle","blastoise","caterpie","metapod","butterfree","weedle","kakuna","beedrill","pidgey","pidgeotto","pidgeot","rattata","raticate","spearow","fearow","ekans","arbok","pikachu","raichu","mewtwo","mew"]
+    var pokemonData : Set<String> = ["bulbasaur","ivysaur","venusaur","charmander","charmeleon","charizard","squirtle","wartortle","blastoise","caterpie","metapod","butterfree","weedle","kakuna","beedrill","pidgey","pidgeotto","pidgeot","rattata","raticate","spearow","fearow","ekans","arbok","pikachu","raichu","mewtwo","mew"]
+    var pokemonArray : [String] {
+        return Array(pokemonData).sorted()
+    }
+        
+    // Diffable Data Source
+    enum Section{
+        case main
+    }
     
-    var filteredPokemonData : [String] = []
+    private lazy var dataSource : UITableViewDiffableDataSource<Section,String> = {
+        let datasource : UITableViewDiffableDataSource<Section,String> = UITableViewDiffableDataSource(tableView: self.tableView) { [unowned self](tableview, indexpath, pokemonName) -> UITableViewCell? in
+            let cell = tableview.dequeueReusableCell(withIdentifier: "pokemonCell", for: indexpath) as? PokemonTableViewCell
+            cell?.textLabel?.text = pokemonName
+            return cell
+        }
+        return datasource
+    }()
+    private var sections = [Section.main]
+
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        filteredPokemonData = pokemonData
         self.setupUI()
     }
     
@@ -50,23 +69,60 @@ class HomeViewController: UIViewController {
         searchController.obscuresBackgroundDuringPresentation = false
         searchController.searchBar.placeholder = "Search for pokemon"
         navigationItem.searchController = searchController
-        
+        applyInitialSnapshot(animatingDifferences: false)
     }
     
+    @objc func getMoreData(){
+        var newData : Set<String> = Set(arrayLiteral: "eevee","jolteon","flareon","vaporeon")
+        
+        // Make a snapshot and apply it with all items you want to include, or insert into the existing snapshot by calling .snapshot() on the currently used datasource.
+       var snapshot = NSDiffableDataSourceSnapshot<Section,String>()
+        snapshot.appendSections([.main])
+        pokemonData = pokemonData.union(newData)
+        snapshot.appendItems(pokemonArray)
+        dataSource.apply(snapshot,animatingDifferences: true)
+        tableView.refreshControl?.endRefreshing()
+    }
+    
+    
+}
+
+extension HomeViewController{
+    
+    func applyInitialSnapshot(animatingDifferences: Bool = true) {
+      var snapshot = NSDiffableDataSourceSnapshot<Section,String>()
+      snapshot.appendSections(sections)
+      snapshot.appendItems(pokemonArray)
+      dataSource.apply(snapshot, animatingDifferences: animatingDifferences)
+    }
+
+    
+}
+
+extension HomeViewController : UITableViewDelegate{
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let poke = self.pokemonArray[indexPath.row]
+        print(poke)
+    }
     
 }
 
 extension HomeViewController : UISearchResultsUpdating,UISearchControllerDelegate{
     func updateSearchResults(for searchController: UISearchController) {
         guard let text = searchController.searchBar.text, text.count > 0 else{
-            filteredPokemonData = pokemonData
+            applyInitialSnapshot()
             return
         }
-        filteredPokemonData = pokemonData.filter({ (name) -> Bool in
+        let filteredPokemonData = pokemonArray.filter({ (name) -> Bool in
             name.contains(text.lowercased())
         })
-print(filteredPokemonData)
-        self.tableView.reloadData()
+        print(filteredPokemonData)
+        
+        // Create a new snapshot and use filtered search results to populate it, leave the original data source set/array unmodified
+        var snapshot = NSDiffableDataSourceSnapshot<Section,String>()
+        snapshot.appendSections([.main])
+        snapshot.appendItems(filteredPokemonData)
+        dataSource.apply(snapshot)
     }
     
     
@@ -100,31 +156,3 @@ extension HomeViewController : UISearchBarDelegate{
 //    }
 }
 
-extension HomeViewController : UITableViewDelegate, UITableViewDataSource{
-    func numberOfSections(in tableView: UITableView) -> Int {
-        return 1
-    }
-    
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return filteredPokemonData.count
-    }
-    
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "reuse")
-        cell.backgroundColor = .white
-        cell.textLabel?.text = filteredPokemonData[indexPath.row]
-        return cell
-    }
-    
-    // Because we are using NSFetchedResultsController, grab the model object from the fetched results controller instead of managing it ourselves.
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        
-    }
-    
-    func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        
-    }
-    
-    
-    
-}
